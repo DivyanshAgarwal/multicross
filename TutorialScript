@@ -1,14 +1,14 @@
-#This is an example R script that can be used to run multivariate analysis tools on single cell RNA sequencing data
-#This code can also be used to recreate the results in:
-#(i) Agarwal, D., Mukherjee, S., Bhattacharya, B.B., and Zhang, N.R. https://arxiv.org/abs/1906.04776 (2019).
-#(ii) Agarwal et al., Single cell analyses demarcate novel intracellular complement signatures as a key regulator of metabolic reprogramming in the human T cell life cycle, (2020).
+# This is an example R script that can be used to run multivariate analysis tools on single cell RNA sequencing data
+# This code can also be used to recreate the results in:
+# (i) Agarwal, D., Mukherjee, S., Bhattacharya, B.B., and Zhang, N.R. https://arxiv.org/abs/1906.04776 (2019).
+# (ii) Agarwal et al., Single cell analyses demarcate novel intracellular complement signatures as a key regulator of metabolic reprogramming in the human T cell life cycle, In Preparation.
 
 library(Seurat)
 library(multicross)
 library(dplyr)
 
-#Let's consider CD4+ Naive T cells sequenced at rest (0H) and at 12H and 24H post activation.
-#First, read the data from the raw sequencing files:
+# Let's consider CD4+ Naive T cells sequenced at rest (0H) and at 12H and 24H post activation.
+# First, read the data from the raw sequencing files:
 
 N40 <- Read10X("C4N/0H/filtered_feature_bc_matrix/") #CD4 Naive cells at 0h
 N412 <- Read10X("C4N/12H/filtered_feature_bc_matrix/") #CD4 Naive cells at 12h
@@ -22,7 +22,7 @@ parr_N40 <- matchpar(t(as.matrix(N40)))
 parr_N412 <- matchpar(t(as.matrix(N412)))
 parr_N424 <- matchpar(t(as.matrix(N424)))
 
-#Then, normalize and log-transform the data:
+# Then, normalize and log-transform the data:
 N40 = CreateSeuratObject(N40) %>% PercentageFeatureSet(pattern = "^MT-", col.name = "percent.mt") %>%
   SCTransform(vars.to.regress = "percent.mt")
   
@@ -32,7 +32,7 @@ N412 = CreateSeuratObject(N412) %>% PercentageFeatureSet(pattern = "^MT-", col.n
 N424 = CreateSeuratObject(N424) %>% PercentageFeatureSet(pattern = "^MT-", col.name = "percent.mt") %>%
   SCTransform(vars.to.regress = "percent.mt")
 
-##Store the normalized and transformed data as a matrix:
+## Store the normalized and transformed data as a matrix:
 
 Naive4 <- N40[["SCT"]]@data
 Naive4 = as.matrix(Naive4)
@@ -58,7 +58,7 @@ length(N4) # Check that this returns 229, i.e., the total number of pathway-spec
 
 ## Now, to run the graph-based, multisample/multivariate tests for pathway analyses, simply compare the pathway-specific matrices at each time point.
 
-### First, let's make sure the same genes are captured across time points for a given pathway
+# First, let's make sure the same genes are captured across time points for a given pathway
 
 n0 <- c() ; n12 <- c() ; n24 <- c()
 for (i in 1:length(pathlist)) {
@@ -102,7 +102,7 @@ Pathnames <- c("glycolysis","TCA","pentose","fructose/mannose","galactose","OxPh
                "Pyrimidine","Alanine","Glycine","Cysteine","Valine","Arginine","Inositol",
                "Arachidonic","Pyruvate","Propanoate","NAD","Folate","mTOR")
 
-#Let's now compute the multivariate correlation between the complosome and each of these pathways, at each time point:
+# Let's now compute the multivariate correlation between the complosome and each of these pathways, at each time point:
 CCAN40 <- c(); CCAN412 <- c(); CCAN424 <- c()
 
 for (j in 1:length(pathlist)) {
@@ -119,14 +119,14 @@ for (j in 1:length(pathlist)) {
   CCAN424[[j]] = multigene(X_N424, N424[[i]])
   }
   
-## Now, we’d like to figure out whether a multivariate correlation computed above for a particular pathway-pathway association is significant. One way of doing this, while controling for technical covariates, is to perform stratified permutation testing.
+# Now, we’d like to figure out whether a multivariate correlation computed above for a particular pathway-pathway association is significant. One way of doing this, while controling for technical covariates, is to perform stratified permutation testing.
 # First, for a given sample (in this case a given time point and cell type), we will have to match pairs of cells to each other based on the covariate matrices created above, and then swap the row entries based on the matched pairs.
 
 ## Below are two functions that can be used to perform match cells. The first, “rkdist_p” tries to match every cell to every other cell, with at most one cell being unmatched. This “perfect matching” is computationally slower compared with the second function “rkdist_o”, which performs a more “optimal match” between cells, meaning that many cells might not have a corresponding cell to match with because no cell in the given sample is “similar enough“ to them. Consequently, “rkdist_o” matches as many as cells as their first degree knn allows for, and is faster to execute. Depending on your sample size and technical covariate structure, we’d recommend the users to try out both approaches and examine the distribution of the resulting test statistic (which should ideally normally distributed).
 
 # Both functions take as input two matrices X and Y with same number of rows (cells) and different numbers of genes (corresponding to two different pathways). parr is the cells x covariates file used fo matching, and iter specifies the number of iterations used for generating the permutation null of canonical correlations between X and Y:
 
-## Matching Function 1
+# Matching Function 1
 rkdist_p <- function(X,Y,parr,iter) {
   canc <- vector(length = iter)
     for (j in 1:iter) {
@@ -149,7 +149,7 @@ rkdist_p <- function(X,Y,parr,iter) {
 }
 
 
-## Matching Function 2
+# Matching Function 2
 rkdist_o <- function(X,Y,parr,iter) {
   canc <- vector(length = iter)
   for (j in 1:iter) {
@@ -170,7 +170,7 @@ rkdist_o <- function(X,Y,parr,iter) {
   return(canc)
 }
 
-## Once we obtain the stratified permutation null from one of rkdist_p or rkdist_o, we can no assess where the largest canonical correlation between the original X and Y matrices falls with respect to the estimated null.
+# Once we obtain the stratified permutation null from one of rkdist_p or rkdist_o, we can no assess where the largest canonical correlation between the original X and Y matrices falls with respect to the estimated null.
 ## Let’s create a function that can take the output of rkdist and determine 
 whether the multivariate correlation is significant for a given pair of pathway-specific matrices X and Y:
 
@@ -186,7 +186,7 @@ sigPathrel <- function(X, Y, parr, iter) {
   return(rkd)
 }
   
-## Create variables to store the permutation null (for subsequent assessment) and the permutation p-value:
+# Create variables to store the permutation null (for subsequent assessment) and the permutation p-value:
 p.N40 = c(); pvalN40 <- c()
 p.N412 = c(); pvalN412 <- c()
 p.N424 = c(); pvalN424 <- c()
@@ -207,4 +207,4 @@ for (j in 1:length(pathlist)) {
   pvalN424[[j]] = 1-ecdf(p.N424[[j]])(multigene(X_N424, N424[[i]]))
 }
 
-## For a given pathway-pathway association of interest, the user can examine the null distribution in the p.N variable, assess the multivariate correlation estimated using multigene(), and screen for interesting hits based on the permutation p-value, stored in the pval variable in the example above.
+# For a given pathway-pathway association of interest, the user can examine the null distribution in the p.N variable, assess the multivariate correlation estimated using multigene(), and screen for interesting hits based on the permutation p-value, stored in the pval variable in the example above.
