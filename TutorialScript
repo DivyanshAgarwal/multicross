@@ -1,0 +1,210 @@
+#This is an example R script that can be used to run multivariate analysis tools on single cell RNA sequencing data
+#This code can also be used to recreate the results in:
+#(i) Agarwal, D., Mukherjee, S., Bhattacharya, B.B., and Zhang, N.R. https://arxiv.org/abs/1906.04776 (2019).
+#(ii) Agarwal et al., Single cell analyses demarcate novel intracellular complement signatures as a key regulator of metabolic reprogramming in the human T cell life cycle, (2020).
+
+library(Seurat)
+library(multicross)
+library(dplyr)
+
+#Let's consider CD4+ Naive T cells sequenced at rest (0H) and at 12H and 24H post activation.
+#First, read the data from the raw sequencing files:
+
+N40 <- Read10X("C4N/0H/filtered_feature_bc_matrix/") #CD4 Naive cells at 0h
+N412 <- Read10X("C4N/12H/filtered_feature_bc_matrix/") #CD4 Naive cells at 12h
+N424 <- Read10X("C4N/24H/filtered_feature_bc_matrix/") #CD4 Naive cells at 24h
+
+## For each cell, calculate its library size, total number of genes detected and mitochondrial gene expression %.
+# These confounders/features will be used to match cells later during stratified permutation testing.
+# Create the covariate matrix using the function matchpar():
+
+parr_N40 <- matchpar(t(as.matrix(N40)))
+parr_N412 <- matchpar(t(as.matrix(N412)))
+parr_N424 <- matchpar(t(as.matrix(N424)))
+
+#Then, normalize and log-transform the data:
+N40 = CreateSeuratObject(N40) %>% PercentageFeatureSet(pattern = "^MT-", col.name = "percent.mt") %>%
+  SCTransform(vars.to.regress = "percent.mt")
+  
+N412 = CreateSeuratObject(N412) %>% PercentageFeatureSet(pattern = "^MT-", col.name = "percent.mt") %>%
+  SCTransform(vars.to.regress = "percent.mt")
+  
+N424 = CreateSeuratObject(N424) %>% PercentageFeatureSet(pattern = "^MT-", col.name = "percent.mt") %>%
+  SCTransform(vars.to.regress = "percent.mt")
+
+##Store the normalized and transformed data as a matrix:
+
+Naive4 <- N40[["SCT"]]@data
+Naive4 = as.matrix(Naive4)
+
+Naive4_12 <- N412[["SCT"]]@data
+Naive4_12 = as.matrix(Naive4_12)
+
+Naive4_24 <- N424[["SCT"]]@data
+Naive4_24 = as.matrix(Naive4_24)
+
+## Create Pathway-specific matrices using the function scPath()
+## scPath takes a matrix as an input where cells are row entries and genes are column entries:
+
+N4 <- scPath(t(Naive4),"Hs")
+N412 <- scPath(t(Naive4_12),"Hs")
+N424 <- scPath(t(Naive4_24),"Hs")
+
+length(N4) # Check that this returns 229, i.e., the total number of pathway-specific matrices generated.
+## To figure out which index corresponds to which pathway, you can refer to the list here: https://www.dropbox.com/sh/ujxubbcfckvala9/AAAsPl18lF6vYFgYniGBhJTFa?dl=0
+## This folder has three excel files, one for human, one for C. elegans and another one for mouse. 
+## The file corresponding to humans, for instance, has 229 rows, each with a pathway name such as glycolysis, citric acid cycle, etc.
+## In this way, there is a direct correspondence between the elements of the list created by scPath() and the pathway names in the excel file for the corresponding species'
+
+## Now, to run the graph-based, multisample/multivariate tests for pathway analyses, simply compare the pathway-specific matrices at each time point.
+
+### First, let's make sure the same genes are captured across time points for a given pathway
+
+n0 <- c() ; n12 <- c() ; n24 <- c()
+for (i in 1:length(pathlist)) {
+  j <- pathlist[i]
+  n0[[i]] = N4[[j]][,intersect(intersect(colnames(N4[[j]]), colnames(N412[[j]])), colnames(N424[[j]]))]
+  n12[[i]] = N412[[j]][,intersect(intersect(colnames(N4[[j]]), colnames(N412[[j]])), colnames(N424[[j]]))]
+  n24[[i]] = N424[[j]][,intersect(intersect(colnames(N4[[j]]), colnames(N412[[j]])), colnames(N424[[j]]))]
+  print(i)
+}
+
+# Finally, we can compare cells across conditions using the graph-based multivariate, multisample test. For example:
+# Define variables to store the results/p-values from hypothesis testing:
+MMCM_acrosstime = c()
+MCM_acrosstime = c()
+
+for (j in 1:20) {
+  p = 0.0005 
+
+#The user can modify this p-value threshold below which the null hypothesis (no difference in distribution across time points between the three groups) will be rejected
+
+  MMCM_acrosstime[j] <- mmcm(list(n0[[j]], n12[[j]], n24[[j]]), p)
+  MCM_acrosstime[j] <- mcm(list(n0[[j]], n12[[j]], n24[[j]]), p)
+}
+
+## Now, to run the pathway-pathway association analysis using multivariate (canonical) correlations, let's focus on the complement-metabolism axis.
+## First, at each time point, generate a cells x genes matrix where the genes correspond to the complosome genes off interest:
+comp.genes = c("C1QA","C1QB","C1QC","FCN2","FCN3","CRP","CFP","C1RL","C1R","C1S","CFI”, ”MASP2","CFD","CFB","C2","C3","C4A","C4B","C5","C7","C8G","CR1","ITGAM","ITGAX","ITGB2","C3AR1","C5AR1","C5AR2","VSIG4","CALR","C1QBP","CD93", "SERPING1","CFH","CFHR1","CD46","CD55","CD59","CLU","VTN")
+
+X_N40 <- Naive4[intersect(rownames(Naive4),comp.genes),]
+X_N40=t(X_N40) #X_N40 is the complosome-specific matrix of CD4 Naive T cells at 0h
+
+X_N412 <- Naive4_12[intersect(rownames(Naive4_12),comp.genes),]
+X_N412=t(X_N412) #X_N412 is the complosome-specific matrix of CD4 Naive T cells at 12h
+
+X_N424 <- Naive4_24[intersect(rownames(Naive4_24),comp.genes),]
+X_N424=t(X_N424) #X_N424 is the complosome-specific matrix of CD4 Naive T cells at 24h
+
+## Since we are screening a subset of 20 metabolic pathways for coordination with the complosome, let's define a list of these pathways:
+pathlist <- c(1,2,3,5,6,16,17,19,20,21,22,23,27,52,56,63,65,71,75,124)
+Pathnames <- c("glycolysis","TCA","pentose","fructose/mannose","galactose","OxPhos","Purine",
+               "Pyrimidine","Alanine","Glycine","Cysteine","Valine","Arginine","Inositol",
+               "Arachidonic","Pyruvate","Propanoate","NAD","Folate","mTOR")
+
+#Let's now compute the multivariate correlation between the complosome and each of these pathways, at each time point:
+CCAN40 <- c(); CCAN412 <- c(); CCAN424 <- c()
+
+for (j in 1:length(pathlist)) {
+  print(j)
+  i = pathlist[j]
+  
+  #Time 0
+  CCAN40[[j]] = multigene(X_N40, N4[[i]])
+  
+  # Time 12
+  CCAN412[[j]] = multigene(X_N412, N412[[i]])
+
+  # Time 24
+  CCAN424[[j]] = multigene(X_N424, N424[[i]])
+  }
+  
+## Now, we’d like to figure out whether a multivariate correlation computed above for a particular pathway-pathway association is significant. One way of doing this, while controling for technical covariates, is to perform stratified permutation testing.
+# First, for a given sample (in this case a given time point and cell type), we will have to match pairs of cells to each other based on the covariate matrices created above, and then swap the row entries based on the matched pairs.
+
+## Below are two functions that can be used to perform match cells. The first, “rkdist_p” tries to match every cell to every other cell, with at most one cell being unmatched. This “perfect matching” is computationally slower compared with the second function “rkdist_o”, which performs a more “optimal match” between cells, meaning that many cells might not have a corresponding cell to match with because no cell in the given sample is “similar enough“ to them. Consequently, “rkdist_o” matches as many as cells as their first degree knn allows for, and is faster to execute. Depending on your sample size and technical covariate structure, we’d recommend the users to try out both approaches and examine the distribution of the resulting test statistic (which should ideally normally distributed).
+
+# Both functions take as input two matrices X and Y with same number of rows (cells) and different numbers of genes (corresponding to two different pathways). parr is the cells x covariates file used fo matching, and iter specifies the number of iterations used for generating the permutation null of canonical correlations between X and Y:
+
+## Matching Function 1
+rkdist_p <- function(X,Y,parr,iter) {
+  canc <- vector(length = iter)
+    for (j in 1:iter) {
+  samp1 <- sample(1:nrow(X),nrow(X)/2,replace=F)
+  total_indices <- seq(1:nrow(X))
+  samp2 <- setdiff(total_indices,samp1)
+  x_2 = parr[samp2,]
+  for (i in 1:(length(total_indices)-length(x_2[,1]))) {
+  x_1 = parr[samp1,]
+  kn=nabor::knn(x_1,x_2,1)
+  ind_switchX2_withX1 = kn$nn.idx
+  indlist=c(samp1,samp2)
+  X2 <- X
+  X2[c(indlist[i+length(x_1[,1])], indlist[ind_switchX2_withX1[i]]),] <-  X2[c(indlist[ind_switchX2_withX1[i]],indlist[i+length(x_1[,1])]),]
+  x_1[ind_switchX2_withX1[i],] = rep(0,length(x_1[1,]))
+  }
+  canc[j] <- multigene(X2,Y)
+    }
+  return(canc)
+}
+
+
+## Matching Function 2
+rkdist_o <- function(X,Y,parr,iter) {
+  canc <- vector(length = iter)
+  for (j in 1:iter) {
+    samp1 <- sample(1:nrow(X),nrow(X)/2,replace=F)
+    total_indices <- seq(1:nrow(X))
+    samp2 <- setdiff(total_indices,samp1)
+    x_1 = parr[samp1,]
+    x_2 = parr[samp2,]
+    kn=nabor::knn(x_1,x_2,1)
+    ind_switchX2_withX1 = kn$nn.idx
+    indlist <- c(samp1,samp2)
+    X2 <- X
+    for (i in 1:(length(indlist)-length(x_1[,1]))) {
+      X2[c(indlist[i+length(x_1[,1])], indlist[ind_switchX2_withX1[i]]),] <-  X2[c(indlist[ind_switchX2_withX1[i]],indlist[i+length(x_1[,1])]),]
+    }
+    canc[j] <- multigene(X2,Y)
+  }
+  return(canc)
+}
+
+## Once we obtain the stratified permutation null from one of rkdist_p or rkdist_o, we can no assess where the largest canonical correlation between the original X and Y matrices falls with respect to the estimated null.
+## Let’s create a function that can take the output of rkdist and determine 
+whether the multivariate correlation is significant for a given pair of pathway-specific matrices X and Y:
+
+sigPathrel <- function(X, Y, parr, iter) {
+  orig_can <- multigene(X,Y)
+  rkd = rkdist_o(X,Y,parr,iter)
+  qtl <- stats::quantile(rkd, probs=0.95)
+  ifelse(orig_can > qtl, print("The two pathways exhibit significant transcriptional synchrony"),
+  print("The two pathways do not demonstrate evidence for a significant transcriptional synchrony"))
+  formatC((1-ecdf(rkd)(orig_can)), digits = 3, format="f")
+  #return(c('The Matched Permutation P-value for Pathway Interaction is:',pval))
+  #return(orig_canc)
+  return(rkd)
+}
+  
+## Create variables to store the permutation null (for subsequent assessment) and the permutation p-value:
+p.N40 = c(); pvalN40 <- c()
+p.N412 = c(); pvalN412 <- c()
+p.N424 = c(); pvalN424 <- c()
+
+## Now, let’s utilize these concepts on the T cell data we generated:
+
+for (j in 1:length(pathlist)) {
+  print(j)
+  i = pathlist[j]
+  
+  p.N40[[j]] <- sigPathrel_perm(X_N40, N4[[i]], 10000)
+  pvalN40[[j]] = 1-ecdf(p.N40[[j]])(multigene(X_N40, N4[[i]]))
+
+  p.N412[[j]] <- sigPathrel_perm(X_N412, N412[[i]], 10000)
+  pvalN412[[j]] = 1-ecdf(p.N412[[j]])(multigene(X_N412, N412[[i]]))
+
+  p.N424[[j]] <- sigPathrel_perm(X_N424, N424[[i]], 10000)
+  pvalN424[[j]] = 1-ecdf(p.N424[[j]])(multigene(X_N424, N424[[i]]))
+}
+
+## For a given pathway-pathway association of interest, the user can examine the null distribution in the p.N variable, assess the multivariate correlation estimated using multigene(), and screen for interesting hits based on the permutation p-value, stored in the pval variable in the example above.
