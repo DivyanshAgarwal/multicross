@@ -105,6 +105,7 @@ Pathnames <- c("glycolysis","TCA","pentose","fructose/mannose","galactose","OxPh
 # Let's now compute the multivariate correlation between the complosome and each of these pathways, at each time point:
 CCAN40 <- c(); CCAN412 <- c(); CCAN424 <- c()
 
+## Note: the optimal input to the multigene function for determining the largest canonical correlation should be a normalized/transformed matrix, not the raw counts matrix.
 for (j in 1:length(pathlist)) {
   print(j)
   i = pathlist[j]
@@ -177,6 +178,7 @@ whether the multivariate correlation is significant for a given pair of pathway-
 sigPathrel <- function(X, Y, parr, iter) {
   orig_can <- multigene(X,Y)
   rkd = rkdist_o(X,Y,parr,iter)
+  ## We encourage the user to also try the rkdist_p function for a more perfect matching of cells instead. As noted above, the speed of this function can be a bottleneck depending on how large the dataset is.
   qtl <- stats::quantile(rkd, probs=0.95)
   ifelse(orig_can > qtl, print("The two pathways exhibit significant transcriptional synchrony"),
   print("The two pathways do not demonstrate evidence for a significant transcriptional synchrony"))
@@ -197,13 +199,13 @@ for (j in 1:length(pathlist)) {
   print(j)
   i = pathlist[j]
   
-  p.N40[[j]] <- sigPathrel_perm(X_N40, N4[[i]], 10000)
+  p.N40[[j]] <- sigPathrel_perm(X_N40, N4[[i]], 100000)
   pvalN40[[j]] = 1-ecdf(p.N40[[j]])(multigene(X_N40, N4[[i]]))
 
-  p.N412[[j]] <- sigPathrel_perm(X_N412, N412[[i]], 10000)
+  p.N412[[j]] <- sigPathrel_perm(X_N412, N412[[i]], 100000)
   pvalN412[[j]] = 1-ecdf(p.N412[[j]])(multigene(X_N412, N412[[i]]))
 
-  p.N424[[j]] <- sigPathrel_perm(X_N424, N424[[i]], 10000)
+  p.N424[[j]] <- sigPathrel_perm(X_N424, N424[[i]], 100000)
   pvalN424[[j]] = 1-ecdf(p.N424[[j]])(multigene(X_N424, N424[[i]]))
 }
 
