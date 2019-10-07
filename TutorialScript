@@ -197,17 +197,20 @@ p.N424 = c(); pvalN424 <- c()
 
 ## Now, let’s utilize these concepts on the T cell data we generated:
 
+iternum <- 10000 #This variable specifies the number of iterations the user desires to perform while constructing the stratified permutation null.
+## In our experiments, a value between 10,000 and 50,000 has worked well for 10x single cell data with ~5,000 cells sequenced.
+
 for (j in 1:length(pathlist)) {
   print(j)
   i = pathlist[j]
   
-  p.N40[[j]] <- sigPathrel_perm(X_N40, N4[[i]], 100000)
+  p.N40[[j]] <- sigPathrel_perm(X_N40, N4[[i]], iternum)
   pvalN40[[j]] = 1-ecdf(p.N40[[j]])(multigene(X_N40, N4[[i]]))
 
-  p.N412[[j]] <- sigPathrel_perm(X_N412, N412[[i]], 100000)
+  p.N412[[j]] <- sigPathrel_perm(X_N412, N412[[i]], iternum)
   pvalN412[[j]] = 1-ecdf(p.N412[[j]])(multigene(X_N412, N412[[i]]))
 
-  p.N424[[j]] <- sigPathrel_perm(X_N424, N424[[i]], 100000)
+  p.N424[[j]] <- sigPathrel_perm(X_N424, N424[[i]], iternum)
   pvalN424[[j]] = 1-ecdf(p.N424[[j]])(multigene(X_N424, N424[[i]]))
 }
 
