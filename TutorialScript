@@ -123,8 +123,8 @@ for (j in 1:length(pathlist)) {
 # Now, we’d like to figure out whether a multivariate correlation computed above for a particular pathway-pathway association is significant. One way of doing this, while controling for technical covariates, is to perform stratified permutation testing.
 # First, for a given sample (in this case a given time point and cell type), we will have to match pairs of cells to each other based on the covariate matrices created above, and then swap the row entries based on the matched pairs.
 
-## Below are two functions that can be used to perform match cells. The first, “rkdist_p” tries to match every cell to every other cell, with at most one cell being unmatched. This “perfect matching” is computationally slower compared with the second function “rkdist_o”, which performs a more “optimal match” between cells, meaning that many cells might not have a corresponding cell to match with because no cell in the given sample is “similar enough“ to them. Consequently, “rkdist_o” matches as many as cells as their first degree knn allows for, and is faster to execute. Depending on your sample size and technical covariate structure, we’d recommend the users to try out both approaches and examine the distribution of the resulting test statistic (which should ideally normally distributed).
-
+## Below are two functions that can be used to perform match cells. The first, “rkdist_p” tries to match every cell to every other cell, with at most one cell being unmatched. This “perfect/optimal matching” is computationally slower compared with the second function “rkdist_o”, which performs a more “greedy match” between cells, meaning that many cells might not have a corresponding cell to match with because no cell in the given sample is “similar enough“ to them. 
+## Consequently, “rkdist_o” matches as many as cells as their first degree knn allows for, and is faster to execute. Depending on your sample size and technical covariate structure, we’d recommend the users to try out both approaches and examine the distribution of the resulting test statistic (which should ideally normally distributed).
 # Both functions take as input two matrices X and Y with same number of rows (cells) and different numbers of genes (corresponding to two different pathways). parr is the cells x covariates file used fo matching, and iter specifies the number of iterations used for generating the permutation null of canonical correlations between X and Y:
 
 # Matching Function 1
@@ -178,7 +178,9 @@ whether the multivariate correlation is significant for a given pair of pathway-
 sigPathrel <- function(X, Y, parr, iter) {
   orig_can <- multigene(X,Y)
   rkd = rkdist_o(X,Y,parr,iter)
-  ## We encourage the user to also try the rkdist_p function for a more perfect matching of cells instead. As noted above, the speed of this function can be a bottleneck depending on how large the dataset is.
+  
+  ## We encourage the user to also try the rkdist_p function and compare the results from a more perfect/optimal matching of cells instead. As noted above, the speed of this function can be a computational bottleneck depending on how large the dataset is.
+  
   qtl <- stats::quantile(rkd, probs=0.95)
   ifelse(orig_can > qtl, print("The two pathways exhibit significant transcriptional synchrony"),
   print("The two pathways do not demonstrate evidence for a significant transcriptional synchrony"))
